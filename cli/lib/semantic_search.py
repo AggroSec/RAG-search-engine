@@ -1,0 +1,105 @@
+from sentence_transformers import SentenceTransformer
+import numpy as np
+from pathlib import Path
+from lib.search_utils import load_movies
+
+class SemanticSearch:
+    def __init__(self, model_name='all-MiniLM-L6-v2'):
+        self.model = SentenceTransformer(model_name)
+        self.embeddings = None
+        self.documents = None
+        self.document_map = {}
+
+    def generate_embedding(self, text: str):
+        if not text.strip():
+            raise ValueError("text cannot be empty or just whitespace.")
+        embedding = self.model.encode([text])
+        return embedding[0]
+    
+    def build_embeddings(self, documents: list[dict]):
+        self.documents = documents
+        movie_texts = []
+        for doc in documents:
+            self.document_map[doc['id']] = doc
+            movie_texts.append(f"{doc['title']} {doc['description']}")
+
+        self.embeddings = self.model.encode(movie_texts, show_progress_bar=True)
+        embedding_path = Path("cache/movie_embeddings.npy")
+        if not embedding_path.parent.exists():
+            embedding_path.parent.mkdir(parents=True)
+        np.save(embedding_path, self.embeddings)
+        print(f"Embeddings saved to {embedding_path}")
+        return self.embeddings
+    
+    def load_or_create_embeddings(self, documents: list[dict]):
+        embedding_path = Path("cache/movie_embeddings.npy")
+        self.documents = documents
+        for doc in documents:
+            self.document_map[doc['id']] = doc
+        if embedding_path.exists():
+            print(f"Loading embeddings from {embedding_path}")
+            self.embeddings = np.load(embedding_path)
+            if len(self.embeddings) == len(documents):
+                return self.embeddings  
+        else:
+            print("Embeddings not found, building new embeddings.")
+            return self.build_embeddings(documents)
+        
+    def search(self, query: str, limit: int):
+        if self.embeddings is None:
+            raise ValueError("Embeddings not loaded. Call `load_or_create_embeddings` first.")
+        
+        query_embedding = self.generate_embedding(query)
+        similarity_list = []
+        for i, embedding in enumerate(self.embeddings):
+            similarity_score = cosine_similarity(query_embedding, embedding)
+            similarity_tup = (similarity_score, self.documents[i])
+            similarity_list.append(similarity_tup)
+        similarity_list.sort(key=lambda x: x[0], reverse=True)
+        return similarity_list[:limit]
+
+
+
+def verify_model():
+    semantic_search = SemanticSearch()
+    print(f"Model loaded: {semantic_search.model}")
+    print(f"Max sequence length: {semantic_search.model.max_seq_length}")
+
+def embed_text(text: str):
+    semantic_search = SemanticSearch()
+    embedding = semantic_search.generate_embedding(text)
+    print(f"Text: {text}")
+    print(f"First 3 dimensions: {embedding[:3]}")
+    print(f"Dimensions: {embedding.shape[0]}")
+
+def verify_embeddings():
+    semantic_search = SemanticSearch()
+    movies = load_movies()
+    embeddings = semantic_search.load_or_create_embeddings(movies)
+    print(f"Number of docs:   {len(movies)}")
+    print(f"Embeddings shape: {embeddings.shape[0]} vectors in {embeddings.shape[1]} dimensions")
+
+def embed_query_text(query: str):
+    semantic_search = SemanticSearch()
+    embedding = semantic_search.generate_embedding(query)
+    print(f"Query: {query}")
+    print(f"First 3 dimensions: {embedding[:3]}")
+    print(f"Shape: {embedding.shape}")
+
+def cosine_similarity(vec1, vec2):
+    dot_product = np.dot(vec1, vec2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+
+    return dot_product / (norm1 * norm2)
+
+def chunk_text(text: str, chunk_size: int = 200, overlap: int = 0) -> list[str]:
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), chunk_size - overlap):
+        chunk = " ".join(words[i:i + chunk_size])
+        chunks.append(chunk)
+    return chunks
