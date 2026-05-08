@@ -81,7 +81,7 @@ class InvertedIndex:
         token = stem_tokens(token)
         if len(token) < 1 or len(token) > 1:
             raise ValueError("Term must be a single token after processing.")
-        return self.term_frequencies.get(doc_id, {}).get(term, 0)
+        return self.term_frequencies.get(doc_id, {}).get(token[0], 0)
     
     def get_bm25_idf(self, term: str) -> float:
         total_docs = len(self.docmap)
@@ -118,4 +118,14 @@ class InvertedIndex:
                 scores[doc_id] += self.bm25(doc_id, token)
 
         ranked_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        return ranked_docs[:limit]
+        final_results = []
+        for key, score in ranked_docs:
+            movie = self.docmap[key]
+            final_results.append({
+                "id": movie['id'],
+                "title": movie['title'],
+                'description': movie['description'],
+                'score': score
+            })
+            
+        return ranked_docs[:limit], final_results[:limit]

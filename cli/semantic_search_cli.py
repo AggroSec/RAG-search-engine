@@ -27,6 +27,17 @@ def main():
     chunk_parser.add_argument("--chunk-size", type=int, default=200, help="Size to chunk the text into")
     chunk_parser.add_argument("--overlap", type=int, default=0, help="Number of overlapping words between chunks")
 
+    semantic_chunk_parser = subparsers.add_parser("semantic_chunk", help="Semantically chunk a given text into smaller pieces")
+    semantic_chunk_parser.add_argument("text", type=str, help="Text to semantically chunk")
+    semantic_chunk_parser.add_argument("--max-chunk-size", type=int, default=4, help="Maximum size to chunk the text into")
+    semantic_chunk_parser.add_argument("--overlap", type=int, default=0, help="Number of overlapping words between chunks")
+
+    embed_chunks_parser = subparsers.add_parser("embed_chunks", help="Generate embeddings for chunks of a given text")
+
+    search_chunked_parser = subparsers.add_parser("search_chunked", help="Search for similar documents based on a query using chunked embeddings")
+    search_chunked_parser.add_argument("query", type=str, help="Query text to search for")
+    search_chunked_parser.add_argument("--limit", type=int, default=5, help="Number of search results to return")
+
     args = parser.parse_args()
 
     match args.command:
@@ -54,6 +65,21 @@ def main():
             chunks = chunk_text(args.text, args.chunk_size, args.overlap)
             for i, chunk in enumerate(chunks):
                 print(f"{i+1}. {chunk}")
+        case "semantic_chunk":
+            print(f"Semantically chunking {len(args.text)} characters")
+            chunks = semantic_chunk_text(args.text, args.max_chunk_size, args.overlap)
+            for i, chunk in enumerate(chunks):
+                print(f"{i+1}. {chunk}")
+        case "embed_chunks":
+            embed_chunks()
+        case "search_chunked":
+            semantic_chunk_search = ChunkedSemanticSearch()
+            movies = load_movies()
+            semantic_chunk_search.load_or_create_chunk_embeddings(movies)
+            results = semantic_chunk_search.search_chunks(args.query, args.limit)
+            for i, result in enumerate(results):
+                print(f"{i+1}. {result['title']} (score: {result['score']:.4f})")
+                print(f"{result['description']}...")
         case _:
             parser.print_help()
 

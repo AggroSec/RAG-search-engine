@@ -11,3 +11,4 @@ wheels/
 
 # User added files
 /data/
+.env
